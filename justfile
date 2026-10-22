@@ -18,3 +18,8 @@ db-reset:
 # Open a psql shell in the dev database
 db-psql:
     docker compose exec db sh -c 'psql -U "$POSTGRES_USER" -d "$POSTGRES_DB"'
+
+# Run the FastAPI server
+[working-directory: 'api']
+api:
+    uv run fastapi dev app/main.py
