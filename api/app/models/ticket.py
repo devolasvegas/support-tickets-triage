@@ -1,7 +1,16 @@
 from datetime import datetime
 from enum import IntEnum, StrEnum
+from typing import ClassVar
 
-from sqlalchemy import CheckConstraint, DateTime, Enum, SmallInteger, String, Text, text
+from sqlalchemy import (
+    CheckConstraint,
+    DateTime,
+    Enum,
+    SmallInteger,
+    String,
+    Text,
+    func,
+)
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base
@@ -41,9 +50,9 @@ def _enum_values(e: type[StrEnum]) -> list[str]:
     return [m.value for m in e]
 
 
-def _str_enum(cls, name):
+def _str_enum(enum_cls: type[StrEnum], name: str) -> Enum:
     return Enum(
-        cls,
+        enum_cls,
         name=name,
         native_enum=False,
         create_constraint=True,
@@ -58,20 +67,21 @@ class Ticket(Base):
             f"priority BETWEEN {min(Priority)} AND {max(Priority)}", name="priority"
         ),
     )
+    __mapper_args__: ClassVar = {"eager_defaults": True}
 
     id: Mapped[int] = mapped_column(primary_key=True)
     status: Mapped[Status] = mapped_column(_str_enum(Status, "status"))
     priority: Mapped[int] = mapped_column(SmallInteger)
     plan_tier: Mapped[PlanTier] = mapped_column(_str_enum(PlanTier, "plan_tier"))
     category: Mapped[Category] = mapped_column(_str_enum(Category, "category"))
-    subject: Mapped[str] = mapped_column(String(50))
+    subject: Mapped[str] = mapped_column(String(255))
     body: Mapped[str] = mapped_column(Text)
-    customer: Mapped[str] = mapped_column(String)
-    asignee: Mapped[str | None] = mapped_column(String)
+    customer: Mapped[str] = mapped_column(String(255))
+    assignee: Mapped[str | None] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), server_default=text("NOW()")
+        DateTime(timezone=True), server_default=func.now()
     )
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), onupdate=datetime.datetime.now
+        DateTime(timezone=True), onupdate=func.now(), server_default=func.now()
     )
     sla_due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
