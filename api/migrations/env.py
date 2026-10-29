@@ -14,7 +14,10 @@ config = context.config
 
 # Get DB URL from settings, not alembic.ini
 database_url = get_settings().database_url
-config.set_main_option("sqlalchemy.url", database_url)
+# Escape the % character for Alembic's ConfigParser
+database_url_escaped = database_url.replace("%", "%%")
+
+config.set_main_option("sqlalchemy.url", database_url_escaped)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
