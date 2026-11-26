@@ -23,3 +23,9 @@ db-psql:
 [working-directory: 'api']
 api:
     uv run fastapi dev app/main.py
+
+# Seed the DB with triage tickets
+[working-directory: 'api']
+seed:
+    uv run python seed_tickets.py
+
