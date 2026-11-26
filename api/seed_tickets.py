@@ -1,9 +1,12 @@
+import asyncio
 import random
 from datetime import UTC, datetime, timedelta
 
 from faker import Faker
+from sqlalchemy import delete
 
 from app.agents import AGENTS
+from app.db import SessionLocal, engine
 from app.models.ticket import Category, PlanTier, Priority, Status, Ticket
 from app.sla import compute_sla_due_at
 from seed_templates import TEMPLATES
@@ -50,7 +53,7 @@ def make_ticket(
     )
 
 
-def main() -> None:
+async def main() -> None:
     fake = Faker()
     Faker.seed(42)
 
@@ -62,9 +65,13 @@ def main() -> None:
 
     tickets = [make_ticket(rng, fake, customers, now) for _ in range(10_000)]
 
-    for t in tickets[:3]:
-        print(t.subject, t.customer, t.plan_tier)
+    async with SessionLocal() as session:
+        await session.execute(delete(Ticket))
+        session.add_all(tickets)
+        await session.commit()
+
+    await engine.dispose()
 
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())
