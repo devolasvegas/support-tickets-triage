@@ -1,45 +1,69 @@
 import random
+from datetime import UTC, datetime, timedelta
 
 from faker import Faker
 
+from app.agents import AGENTS
 from app.models.ticket import Category, PlanTier, Priority, Status, Ticket
-
-fake = Faker()
-Faker.seed(42)
-
-SUBJECTS: dict[Category, list[str]] = {
-    Category.BILLING: ["Charged twice for {month}", "Invoice {n} is wrong"]
-}
-
-rng = random.Random(42)
-
-customers = {fake.unique.company(): rng.choice(list(PlanTier)) for _ in range(300)}
+from app.sla import compute_sla_due_at
+from seed_templates import TEMPLATES
 
 
 def make_ticket(
-    rng: random.Random, fake: Faker, customers: dict[str, PlanTier]
+    rng: random.Random, fake: Faker, customers: dict[str, PlanTier], now: datetime
 ) -> Ticket:
+    status = rng.choices(list(Status), weights=[15, 35, 20, 15, 15])[0]
+    priority = rng.choices(list(Priority), weights=[5, 20, 50, 25])[0]
     category = rng.choice(list(Category))
-    subject = rng.choice(SUBJECTS[category]).format(
-        month=fake.month_name(), n=fake.random_int(1000, 9999)
-    )
+    subject_tpl, body_tpl = rng.choice(TEMPLATES[category])
+    placeholder_vals = {
+        "month": fake.month_name(),
+        "invoice": f"INV-{fake.random_int(1000, 9999)}",
+        "amount": f"${rng.randint(9, 499)}.00",
+        "feature": rng.choice(["Reports", "Dashboards", "Billing"]),
+        "email": fake.email(),
+        "browser": rng.choice(["Safari", "Chrome", "Edge", "Firefox", "Opera"]),
+    }
+    subject = subject_tpl.format(**placeholder_vals)
+    body = body_tpl.format(**placeholder_vals)
     customer = rng.choice(list(customers))
-
-    # assignee should be None for NEW tickets and filled in for the other statuses, so the data matches how the statuses work.
-    # Set created_at and updated_at explicitly. Otherwise server_default=func.now() stamps all 10,000 rows with the same moment.
+    plan_tier = customers[customer]
+    assignee = None if status == Status.NEW else rng.choice(AGENTS)
+    start = "-90d" if status in (Status.RESOLVED, Status.CLOSED) else "-18h"
+    created_at = fake.date_time_between(start_date=start, end_date=now, tzinfo=UTC)
+    gap = timedelta(hours=rng.uniform(0.5, 72))
+    updated_at = created_at if status == Status.NEW else min(created_at + gap, now)
+    sla_due_at = compute_sla_due_at(created_at, priority, plan_tier)
 
     return Ticket(
-        status=rng.choice(list(Status)),
-        priority=rng.choices(list(Priority), weights=[5, 20, 50, 25])[0],
-        plan_tier=customers[customer],
+        status=status,
+        priority=priority,
+        plan_tier=plan_tier,
         category=category,
         subject=subject,
+        body=body,
         customer=customer,
+        assignee=assignee,
+        created_at=created_at,
+        updated_at=updated_at,
+        sla_due_at=sla_due_at,
     )
 
 
 def main() -> None:
-    [make_ticket(rng, fake, customers) for _ in range(10_000)]
+    fake = Faker()
+    Faker.seed(42)
+
+    rng = random.Random(42)
+
+    customers = {fake.unique.company(): rng.choice(list(PlanTier)) for _ in range(300)}
+
+    now = datetime.now(UTC)
+
+    tickets = [make_ticket(rng, fake, customers, now) for _ in range(10_000)]
+
+    for t in tickets[:3]:
+        print(t.subject, t.customer, t.plan_tier)
 
 
 if __name__ == "__main__":
